@@ -44,26 +44,61 @@ export class TimeSeriesDrawer extends Drawer {
   public titleDrawer: ChartTitle;
   public range: MovableRange<TimeSeriesData>;
   public canScale = false;
-  public topValue = ((lastTopValue = Number.MIN_VALUE) =>
-    () => {
-      if (this.maxValue > lastTopValue) {
-        // const extra = clamp(Math.abs(this.maxValue * 0.01), 0.05, 2.5);
-        //   console.log('this.maxValue',this.maxValue);
-        lastTopValue = this.maxValue + (this.maxValue * 0.01);
+
+  private fSkip = GetSkip(this.maxValue - this.minValue);
+  public topValue = ((lastTopValue = Number.MIN_VALUE) => () => {
+    // if (this.maxValue > lastTopValue) {
+    //   // const extra = clamp(Math.abs(this.maxValue * 0.01), 0.05, 2.5);
+    //   //   console.log('this.maxValue',this.maxValue);
+    //   lastTopValue = this.maxValue + this.maxValue * 0.01;
+    // }
+    // console.log('最大', this.maxValue, lastTopValue)
+    // return lastTopValue;
+    // 找最大值
+    let fNearMax: number = 0;
+
+    let fTimes: number = this.maxValue / this.fSkip;
+    let iTimes = Math.floor(fTimes);
+    fNearMax = iTimes * this.fSkip;
+
+    if (fNearMax < this.maxValue) {
+      fNearMax += this.fSkip;
       }
-      return lastTopValue;
-    }
-  )();
-  public bottomValue = ((lastBottomValue = Number.MAX_VALUE) =>
-    () => {
-      if (this.minValue < lastBottomValue) {
-        // const extra = clamp(Math.abs(this.minValue * 0.01), 0.05, 2.5);
-        //   console.log('this.minValue',this.minValue);
-        lastBottomValue = this.minValue - (this.minValue * 0.01);
+
+    // console.log('最大', this.maxValue, this.fSkip, fNearMax)
+
+    return fNearMax;
+  })();
+  public bottomValue = ((lastBottomValue = Number.MAX_VALUE) => () => {
+    // if (this.minValue < lastBottomValue) {
+    //   // const extra = clamp(Math.abs(this.minValue * 0.01), 0.05, 2.5);
+    //   //   console.log('this.minValue',this.minValue);
+    //   lastBottomValue = this.minValue - this.minValue * 0.01;
+    // }
+    // console.log('最小', this.minValue, lastBottomValue)
+    // return lastBottomValue;
+    // 找最小值
+    let fNearMin = 0;
+
+    //
+    let fTimes: number = this.minValue / this.fSkip;
+    let iTimes = Math.floor(fTimes);
+    fNearMin = iTimes * this.fSkip;
+
+    // 修正浮点数的误差
+    let iTmp = 0;
+    while (fNearMin + this.fSkip <= this.minValue) {
+      fNearMin += this.fSkip;
+      iTmp++;
+      if (iTmp >= 10) {
+        break;
       }
-      return lastBottomValue;
     }
-  )();
+
+    // console.log('最小', this.minValue, this.fSkip, fNearMin)
+
+    return fNearMin;
+  })();
   constructor(chart: Chart, options: DrawerOptions) {
     super(chart, options);
     this.theme = Object.assign({
@@ -148,10 +183,11 @@ export class TimeSeriesDrawer extends Drawer {
   }
   protected drawYAxis() {
     const lastPrice = this.chart.lastPrice;
-    const tickValues = divide(this.bottomValue(), this.topValue()).map((n) => ({
+    const tickValues = divide(this.bottomValue(), this.topValue(), Math.floor(this.chart.height / 48)).map(n => ({
         value: n,
         color: n > lastPrice ? this.theme.rise : this.theme.fall,
     }));
+    // console.log(tickValues)
     drawYAxis(
       this.context,
       tickValues,
@@ -179,8 +215,9 @@ export class TimeSeriesDrawer extends Drawer {
     return `${((value - lastPrice) / lastPrice * 100).toFixed(2)}%`;
   }
   protected drawXAxis() {
-    const tickValues = uniq(divide(0, this.chart.count() - 1, 5)
-      .map((t) => Math.floor(t)));
+    const tickValues = uniq(
+      divide(0, this.chart.count() - 1, 9).map(t => Math.floor(t))
+    );
     drawXAxis(
       this.context,
       tickValues,
@@ -231,4 +268,45 @@ export class TimeSeriesDrawer extends Drawer {
       1 * this.chart.options.resolution,
     );
   }
+}
+
+function GetSkip(fDif: number): number {
+  let fSkip: number = 0;
+
+  //
+  if (fDif < 0.001) {
+    fSkip = 0.0001;
+  } else if (fDif < 0.01) {
+    fSkip = 0.001;
+  } else if (fDif < 0.3) {
+    fSkip = 0.01;
+  } else if (fDif >= 0.3 && fDif < 1.5) {
+    fSkip = 0.05;
+  } else if (fDif >= 1.5 && fDif < 3) {
+    fSkip = 0.1;
+  } else if (fDif >= 3 && fDif < 7.5) {
+    fSkip = 0.25;
+  } else if (fDif >= 7.5 && fDif < 15) {
+    fSkip = 0.5;
+  } else if (fDif >= 15 && fDif < 30) {
+    fSkip = 1.0;
+  } else if (fDif >= 30 && fDif < 150) {
+    fSkip = 5;
+  } else if (fDif >= 150 && fDif < 300) {
+    fSkip = 10;
+  } else if (fDif >= 300 && fDif < 1500) {
+    fSkip = 50;
+  } else if (fDif >= 1500 && fDif < 3000) {
+    fSkip = 100;
+  } else if (fDif >= 3000 && fDif < 6000) {
+    fSkip = 200;
+  } else if (fDif >= 6000 && fDif < 15000) {
+    fSkip = 500;
+  } else if (fDif > 15000 && fDif < 25000) {
+    fSkip = 1000;
+  } else {
+    fSkip = fDif / 10.0;
+  }
+
+  return fSkip;
 }
